@@ -1,31 +1,25 @@
 <?php
 
-
 /* 
-
-include_once 'Expect.php';
-
-
 $expect=new Expect('php -v');
-//$expect->send();
+$expect->createProcess();
+$expect->send($input);
 
-$expectations=array('*PHP*','ho');
-$responded=$expect->expect($expectations);
-
+$expectations=array('PHP','ho');
+$responded=$expect->expect($expectations,$timeout);
 if($responded!=-1){
 	$response=$expectations[$responded];
 	
-	echo "$response (".$expect->lastLoggedResponse.')';
+	echo "$response";
 }
 else{
-	echo "didn't respond with expected answer";
+	// didn't respond with expected answers
 }
 $expect->closeProcess();
 
-
 */
 class Expect{
-	const DEFAULT_TIMEOUT=9999999;
+	const DEFAULT_TIMEOUT=5;
 	private $cmd;
 	private $cwd;
 	private $pipes;
@@ -33,7 +27,19 @@ class Expect{
 	private $logger;
 	public $lastLoggedResponse=null;
 
-	public function __construct($cmd,$cwd=null,LoggerInterface $logger=null){
+	public function __construct($cmd,$cwd=null,LoggerInterface $logger=null,$use_script=true){
+		$this->orig_cmd=$cmd;
+		$this->use_script=$use_script;
+		
+		if($this->use_script){
+			if(PHP_OS=='Linux'){
+				$cmd='script -c '.$cmd.' /dev/null';
+			}
+			else{ // Darwin, (Free/Open)BSD etc.
+				$cmd='script -q /dev/null '.$cmd;
+			}
+		}
+		
 		$this->cmd=$cmd;
 		$this->cwd=$cwd;
 		$this->logger=$logger ?: new NullLogger();
@@ -85,7 +91,7 @@ class Expect{
 			
 			if($response !== '' && $response !== $this->lastLoggedResponse){
 				$this->lastLoggedResponse=$response;
-				$this->logger->info("Expected '".print_r($expectations,true)."',got '{$response}'");
+				$this->logger->info("Expected '".join(' or ',$expectations)."',got '{$response}'");
 			}
 			
 			$expectationnum=0;
@@ -120,3 +126,4 @@ class ProcessTerminatedException extends FailedExpectationException{}
 class ProcessTimeoutException extends FailedExpectationException{}
 class UnexpectedEOFException extends FailedExpectationException{}
 class NullLogger{function info($data=''){}}
+
