@@ -3,22 +3,25 @@
 
 /* 
 
+include_once 'Expect.php';
 
-$expect=new Expect('php');
-$expect->createProcess();
-$expect->send($input);
 
-$expectations=array('hi','ho');
-$responded=$expect->expect($expectations,$timeout);
+$expect=new Expect('php -v');
+//$expect->send();
+
+$expectations=array('*PHP*','ho');
+$responded=$expect->expect($expectations);
+
 if($responded!=-1){
 	$response=$expectations[$responded];
 	
-	
+	echo "$response (".$expect->lastLoggedResponse.')';
 }
 else{
-	// didn't respond with expected answers
+	echo "didn't respond with expected answer";
 }
 $expect->closeProcess();
+
 
 */
 class Expect{
@@ -28,14 +31,13 @@ class Expect{
 	private $pipes;
 	private $process;
 	private $logger;
+	public $lastLoggedResponse=null;
 
-	private function __construct($cmd,$cwd=null,LoggerInterface $logger=null){
+	public function __construct($cmd,$cwd=null,LoggerInterface $logger=null){
 		$this->cmd=$cmd;
 		$this->cwd=$cwd;
 		$this->logger=$logger ?: new NullLogger();
-	}
-	public static function spawn($cmd,$cwd=null,LoggerInterface $logger=null){
-		return new self($cmd,$cwd,$logger);
+		$this->createProcess();
 	}
 	public function expect($output,$timeout=self::DEFAULT_TIMEOUT){
 		return $this->waitForExpectedResponse($output,$timeout);
@@ -53,7 +55,7 @@ class Expect{
 			throw new \RuntimeException('Could not create the process.');
 		}
 	}
-	private function closeProcess(){
+	public function closeProcess(){
 		fclose($this->pipes[0]);
 		fclose($this->pipes[1]);
 		fclose($this->pipes[2]);
@@ -64,7 +66,6 @@ class Expect{
 			$expectations=array($expectations);
 		}
 		$response=null;
-		$lastLoggedResponse=null;
 		$buffer='';
 		$start=time();
 		stream_set_blocking($this->pipes[1],false);
@@ -82,8 +83,8 @@ class Expect{
 			$buffer.=fread($this->pipes[1],4096);
 			$response=static::trimAnswer($buffer);
 			
-			if($response !== '' && $response !== $lastLoggedResponse){
-				$lastLoggedResponse=$response;
+			if($response !== '' && $response !== $this->lastLoggedResponse){
+				$this->lastLoggedResponse=$response;
 				$this->logger->info("Expected '".print_r($expectations,true)."',got '{$response}'");
 			}
 			
@@ -95,8 +96,8 @@ class Expect{
 				}
 				$expectationnum++;
 			}
-			return -1;
 		}
+		return -1;
 	}
 	private function sendInput($input){
 		$this->logger->info("Sending '{$input}'");
@@ -118,3 +119,4 @@ class FailedExpectationException extends \RuntimeException{}
 class ProcessTerminatedException extends FailedExpectationException{}
 class ProcessTimeoutException extends FailedExpectationException{}
 class UnexpectedEOFException extends FailedExpectationException{}
+class NullLogger{function info($data=''){}}
